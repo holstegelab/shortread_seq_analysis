@@ -1,0 +1,282 @@
+--- vcfnorm.c.old	2018-06-02 14:56:21.637995691 +0200
++++ vcfnorm.c	2019-03-14 15:53:42.325709400 +0100
+@@ -29,6 +29,7 @@
+ #include <ctype.h>
+ #include <string.h>
+ #include <errno.h>
++#include <math.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <htslib/vcf.h>
+@@ -567,9 +568,11 @@
+ 
+ static void split_format_genotype(args_t *args, bcf1_t *src, bcf_fmt_t *fmt, int ialt, bcf1_t *dst)
+ {
+-    int ntmp = args->ntmp_arr1 / 4;
+-    int ngts = bcf_get_genotypes(args->hdr,src,&args->tmp_arr1,&ntmp);
+-    args->ntmp_arr1 = ntmp * 4;
++    const char *tag = bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id); 
++    int ntmp = args->ntmp_arr1 / sizeof(int32_t);
++    int ngts = bcf_get_format_int32(args->hdr,src,tag,&args->tmp_arr1,&ntmp);
++
++    args->ntmp_arr1 = ntmp * sizeof(int32_t);
+     assert( ngts >0 );
+ 
+     int32_t *gt = (int32_t*) args->tmp_arr1;
+@@ -577,8 +580,8 @@
+     ngts /= nsmpl;
+     for (i=0; i<nsmpl; i++)
+     {
+-        for (j=0; j<ngts; j++)
+-        {
++         for (j=0; j<ngts; j++)
++         {
+             if ( gt[j]==bcf_int32_vector_end ) break;
+             if ( bcf_gt_is_missing(gt[j]) || bcf_gt_allele(gt[j])==0 ) continue; // missing allele or ref: leave as is
+             if ( bcf_gt_allele(gt[j])==ialt+1 )
+@@ -588,8 +591,222 @@
+         }
+         gt += ngts;
+     }
+-    bcf_update_genotypes(args->hdr,dst,args->tmp_arr1,ngts*nsmpl);
++    bcf_update_format_int32(args->hdr,dst, tag, args->tmp_arr1,(ngts * nsmpl));
+ }
++static void split_format_phredlikelihood(args_t *args, bcf1_t *src, bcf_fmt_t *fmt, int ialt, bcf1_t *dst)
++{
++    const char *tag = bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id); 
++    int ntmp = args->ntmp_arr1 / sizeof(int32_t); 
++    int nvals = bcf_get_format_int32(args->hdr,src,tag,&args->tmp_arr1,&ntmp); 
++    args->ntmp_arr1 = ntmp * sizeof(int32_t); 
++    assert( nvals>0 ); 
++    int32_t *vals = (int32_t *) args->tmp_arr1; 
++    int len = bcf_hdr_id2length(args->hdr,BCF_HL_FMT,fmt->id); 
++    int i, j, k, nsmpl = bcf_hdr_nsamples(args->hdr);
++    if ( nvals==nsmpl ) /* all values are missing */ 
++    { 
++        bcf_update_format_int32(args->hdr,dst,tag,vals,nsmpl); 
++        return; 
++    } 
++    if ( len==BCF_VL_G ) 
++    { 
++        if ( nvals!=src->n_allele*(src->n_allele+1)/2*nsmpl && nvals!=src->n_allele*nsmpl ) 
++            error("Error at %s:%d, the tag %s has wrong number of fields\n", bcf_seqname(args->hdr,src),src->pos+1,bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id)); 
++        nvals /= nsmpl; 
++        int all_haploid = nvals==src->n_allele ? 1 : 0; 
++        int32_t *src_vals = vals, *dst_vals = vals; 
++
++        double d0, d1, d2;
++        int count0, count1;
++        for (i=0; i<nsmpl; i++) 
++        { 
++            int haploid = all_haploid; 
++            if ( (!haploid) && (src_vals[0] != bcf_int32_missing) )
++            { 
++                for (j=0; j<nvals; j++) if ( src_vals[j]==bcf_int32_vector_end ) break; 
++                if ( j!=nvals ) haploid = 1; 
++            }
++            d0 = 0.0;
++            d1 = 0.0;
++            d2 = 0.0;
++            double norm_d;
++
++            if ( haploid ) 
++            {
++                if(src_vals[0] == bcf_int32_missing)
++                {
++                    for(k = 0; k < src->n_allele; k++)
++                    {
++                        if(!(k == (ialt + 1))) //sum of genotypes that do not carry current alt
++                        {
++                            d0 += 1.0;
++                        }
++                    }
++                    d0 = -10.0 * log10(d0 / ((double) (src->n_allele - 1))); 
++                    d1 = 0.0;  //genotype that equals curent alt
++                
++                }
++                else
++                {
++                    for(k = 0; k < src->n_allele; k++)
++                    {
++                        if(!(k == (ialt + 1))) //sum of genotypes that do not carry current alt
++                        {
++                            d0 += pow(10, -0.1 * ((double) src_vals[k]));
++                        }
++                    }
++                    d0 = -10.0 * log10(d0 / ((double) (src->n_allele - 1))); 
++                    d1 = src_vals[ialt + 1];  //genotype that equals curent alt
++                }
++
++                norm_d = d0;
++                if(d1 < norm_d) norm_d = d1;
++                
++                //prevent overflow
++                d0 =  ((d0 - norm_d) > 10000.0) ? 10000.0 + norm_d : d0;
++                d1 =  ((d1 - norm_d) > 10000.0) ? 10000.0 + norm_d : d1;
++
++                dst_vals[0] = (int) round(d0 - norm_d);
++                dst_vals[1] = (int) round(d1 - norm_d);
++
++
++                if ( !all_haploid ) dst_vals[2]=bcf_int32_vector_end; 
++            } 
++            else 
++            { 
++                count0 = 0;
++                count1 = 0;
++                
++                if(src_vals[0] == bcf_int32_missing)
++                {
++                    for(k = 0; k < src->n_allele; k++)
++                    {
++                        for(j=k; j < src->n_allele;j++)
++                        {
++                            if((!(k == (ialt + 1))) && (!(j == (ialt + 1)))) //sum of genotypes that do not carry current alt
++                            {
++                                d0 += 1.0;
++                                count0 += 1;
++                            }
++                            if(((k == (ialt + 1)) && (!(j == (ialt + 1)))) ||  ((!(k == (ialt + 1))) && (j == (ialt + 1)))) //sum of genotypes that carry single current alt
++                            {
++                                d1 += 1.0;
++                                count1 += 1;
++                            }
++                        }
++                    }
++                    d0 = -10.0 * log10(d0/ ((double) count0));
++                    d1 = -10.0 * log10(d1 / ((double) count1));
++                    d2 = (double) 0.0;
++                }
++                else
++                {
++                    for(k = 0; k < src->n_allele; k++)
++                    {
++                        for(j=k; j < src->n_allele;j++)
++                        {
++                            if((!(k == (ialt + 1))) && (!(j == (ialt + 1)))) //sum of genotypes that do not carry current alt
++                            {
++                                d0 += pow(10, -0.1 * ((double) src_vals[bcf_alleles2gt(k,j)]));
++                                count0 +=1;
++                            }
++                            if(((k == (ialt + 1)) && (!(j == (ialt + 1)))) ||  ((!(k == (ialt + 1))) && (j == (ialt + 1)))) //sum of genotypes that carry single current alt
++                            {
++                                d1 += pow(10, -0.1 * ((double) src_vals[bcf_alleles2gt(k,j)]));
++                                count1 += 1;
++                            }
++                        }
++                    }
++                    
++                    
++                    d0 = -10.0 * log10(d0 / ((double) count0));
++                    d1 = -10.0 * log10(d1 / ((double) count1));
++                    d2 = ((double) src_vals[bcf_alleles2gt(ialt+1,ialt+1)]);  //genotype that carrys double current alt
++                }
++                    
++                norm_d = d0;
++                if(d1 < norm_d) norm_d = d1;
++                if(d2 < norm_d) norm_d = d2;
++
++                //prevent overflow
++                d0 =  ((d0 - norm_d) > 10000.0) ? 10000.0 + norm_d : d0;
++                d1 =  ((d1 - norm_d) > 10000.0) ? 10000.0 + norm_d : d1;
++                d2 =  ((d2 - norm_d) > 10000.0) ? 10000.0 + norm_d : d2;
++
++                dst_vals[0] = (int) round(d0 - norm_d);
++                dst_vals[1] = (int) round(d1 - norm_d);
++                dst_vals[2] = (int) round(d2 - norm_d);
++            } 
++            dst_vals += all_haploid ? 2 : 3; 
++            src_vals += nvals; 
++        } 
++        bcf_update_format_int32(args->hdr,dst,tag,vals,all_haploid ? nsmpl*2 : nsmpl*3); 
++    } 
++    else 
++        error("Error at %s:%d, the tag %s has wrong type\n", bcf_seqname(args->hdr,src),src->pos+1,bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id)); 
++}
++
++static void split_format_readcount(args_t *args, bcf1_t *src, bcf_fmt_t *fmt, int ialt, bcf1_t *dst)
++{
++   const char *tag = bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id); 
++   int ntmp = args->ntmp_arr1 / sizeof(int32_t); 
++   int nvals = bcf_get_format_int32(args->hdr,src,tag,&args->tmp_arr1,&ntmp); 
++   args->ntmp_arr1 = ntmp * sizeof(int32_t); 
++   assert( nvals>0 ); 
++   int32_t *vals = (int32_t *) args->tmp_arr1; 
++   int len = bcf_hdr_id2length(args->hdr,BCF_HL_FMT,fmt->id); 
++   int i, j, count, nsmpl = bcf_hdr_nsamples(args->hdr); 
++   if ( nvals==nsmpl ) /* all values are missing */ 
++   { 
++       bcf_update_format_int32(args->hdr,dst,tag,vals,nsmpl); 
++       return; 
++   } 
++   if ( len==BCF_VL_R ) 
++   { 
++       if ( nvals!=src->n_allele*nsmpl ) 
++           error("Error: wrong number of fields in FMT/%s at %s:%d, expected %d, found %d\n", 
++               tag,bcf_seqname(args->hdr,src),src->pos+1,src->n_allele*nsmpl,nvals); 
++       nvals /= nsmpl; 
++       int32_t *src_vals = vals, *dst_vals = vals; 
++
++
++       for (i=0; i<nsmpl; i++) 
++       {
++           count = 0;
++           if(src_vals[0] == bcf_int32_missing)
++           {
++               dst_vals[0] = src_vals[0];
++               dst_vals[1] = src_vals[ialt+1];
++           }
++           else
++           {
++                for(j=0; j<nvals; j++)
++                {
++                    if(j!=(ialt+1))
++                    {
++                        if(src_vals[j] == bcf_int32_vector_end)
++                        {
++                                count = bcf_int32_vector_end;
++                                break;
++                        }
++                        count += src_vals[j]; 
++                    }
++
++                }
++                dst_vals[0] = count;
++                dst_vals[1] = src_vals[ialt+1]; 
++           }
++           dst_vals += 2; 
++           src_vals += nvals; 
++       } 
++       bcf_update_format_int32(args->hdr,dst,tag,vals,nsmpl*2); 
++   } 
++   else 
++       error("Error at %s:%d, the tag %s has wrong type\n", bcf_seqname(args->hdr,src),src->pos+1,bcf_hdr_int2id(args->hdr,BCF_DT_ID,fmt->id)); 
++}
++
++
++
+ static void split_format_numeric(args_t *args, bcf1_t *src, bcf_fmt_t *fmt, int ialt, bcf1_t *dst)
+ {
+     #define BRANCH_NUMERIC(type,type_t,is_vector_end,set_vector_end) \
+@@ -805,6 +1022,10 @@
+     kputc(',', &tmp);
+     int rlen  = tmp.l;
+     int gt_id = bcf_hdr_id2int(args->hdr,BCF_DT_ID,"GT");
++    int pgt_id = bcf_hdr_id2int(args->hdr,BCF_DT_ID,"PGT");
++    int pl_id = bcf_hdr_id2int(args->hdr,BCF_DT_ID,"PL");
++    int ad_id = bcf_hdr_id2int(args->hdr,BCF_DT_ID,"AD");
++
+     for (i=0; i<args->ntmp_lines; i++)  // for each ALT allele
+     {
+         if ( !args->tmp_lines[i] ) args->tmp_lines[i] = bcf_init1();
+@@ -840,7 +1061,9 @@
+         {
+             bcf_fmt_t *fmt = &line->d.fmt[j];
+             int type = bcf_hdr_id2type(args->hdr,BCF_HL_FMT,fmt->id);
+-            if ( fmt->id==gt_id ) split_format_genotype(args, line, fmt, i, dst);
++            if ( fmt->id==gt_id  || fmt->id == pgt_id) split_format_genotype(args, line, fmt, i, dst);
++            else if ( fmt->id==pl_id) split_format_phredlikelihood(args, line, fmt, i, dst);
++            else if ( fmt->id==ad_id) split_format_readcount(args, line, fmt, i, dst);
+             else if ( type==BCF_HT_INT || type==BCF_HT_REAL ) split_format_numeric(args, line, fmt, i, dst);
+             else split_format_string(args, line, fmt, i, dst);
+         }
