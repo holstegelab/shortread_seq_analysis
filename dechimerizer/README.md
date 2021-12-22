@@ -18,6 +18,9 @@ samtools view -h -@ 8 {input} | python {MYPATH}/bam_clean.py | samtools view -@ 
 Tip: for faster performance, use pypy. 
 
 
+Dependencies:
+- swalign
+
 # Bam Stats
 
 Generates BAM statistics for the following fields:
@@ -44,3 +47,7 @@ Usage:
 samtools view -s 0.05 -h {input[0]} --threads 8 | {MYPATH}/bam_stats.py stats > {output}
 
 This generates statistics with a sampling ratio = 0.05, this can be adapted as needed. 
+
+
+Dependencies:
+- numpy
