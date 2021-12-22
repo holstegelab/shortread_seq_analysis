@@ -17,3 +17,6 @@ A more detailed description of the rules followed by these patches is given in t
 
 These patches have been developed with respect to BCFTools version 1.8. 
 
+Limitations:
+- the patches currenlty only support haploid and diploid calls. 
+
