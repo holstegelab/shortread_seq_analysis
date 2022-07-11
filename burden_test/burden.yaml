@@ -1,0 +1,13 @@
+name: burden
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python
+  - r-mass
+  - r-lmtest
+  - cyvcf2
+  - numpy
+  - rpy2
+  - ipython

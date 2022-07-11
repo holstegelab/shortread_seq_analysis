@@ -1,15 +1,15 @@
 ## Calculates population prior for variant based on genotype likelihoods (PL field)
 ##
 ## PROBLEM
-## Genotype probability vectors cannot be used 'as-is'.
-## This can be best be explained from the case where no reads are available: all genotypes are then equally likely, and therefore GATK gives a probability of 0.33/0.33/0.33.
-## One can observe two problems::
-## - If this is a rare variant, then using a genotype probability of 0.33 here for an alternate homozygous allele is a large overestimation
+## Genotype likelhood vectors form GATK describe the likelihood of a genotype based on the available data. Genotype likelihood is mainly dependent
+## on coverage and allele balance, and therefore provide a good way to account for varying coverage. However, they cannot be used directly.
+## This can be best be observed from the case where no reads are available: all genotypes are then equally likely, and therefore GATK 
+## gives a probability of 0.33/0.33/0.33. One can observe two problems::
+## - If this is a rare variant, then using a genotype probability of 0.33 for an alternate homozygous allele is a large overestimation
 ## - Giving an equal probability to each genotype does not take into account Hardy-Weinberg.
 ##
-##
 ## SOLUTION
-## The functions in this file calculates genotype priors based on estimated population allele frequency, instead of assuming each genotype equally likely.
+## The functions in this file adapt genotype priors based on estimated population allele frequency, instead of assuming each genotype equally likely.
 ## For example,  a low population frequency means also a lower prior probability for homozygous alternate genotypes.
 ## The approach is to estimate the allele frequency and to take this through Hardy-Weinberg to calculate a genotype prior.
 ##
@@ -23,10 +23,20 @@
 ##    - vector of n_genotypes with prior per genotype
 ##
 ## IMPLEMENTATION NOTES
-##  Note that the allele frequency is based on the genotype probabilities. Here we cannot use the direct genotype probabilities from GATK due to the abovementioned problem, as this would severely overstimate/underestimate
-##  allele-frequency in many cases. Allele frequency has to be estimated based on the posterior genotype probabilities. As these are not yet available (we need to calculate the population prior for that), this is somewhat
-##  of a problem. To solve this chicken/egg problem, we start with an allele frequency estimate of 1/n_allele, and calculate a posterior probability based on that. Then we refine our allele frequency estimate based
-##  on these posterior probabilities, and recalculate new psoterior genotype probabilities using this better estimate of the allele frequency. We iterate this until convergence.
+##  Note that the allele frequency is based on the genotype probabilities. Here we cannot use the direct genotype probabilities from GATK due to the abovementioned problem, as this would severely overestimate/underestimate
+##  allele-frequency in many cases. Allele frequency has to be estimated based on the posterior genotype probabilities. As these are not yet available (we need to calculate the population prior for that), there is a circular dependency. 
+##  To solve this, we start with an allele frequency estimate of 1/n_allele, and calculate a posterior probability based on that. Then we refine our allele frequency estimate based
+##  on these posterior probabilities, and recalculate new posterior genotype probabilities using this better estimate of the allele frequency, iterating until convergence.
+##  
+##
+## ASSUMPTION: 
+## This implementation does not account for local variations in allele frequency. 
+## In samples with highly diverse or partially inbred populations, this could cause deviations from the here 
+## assumed HW, particularly for more common variants, leading to non-optimal priors (and therefore posteriors).
+##
+##
+## LIMITATION:
+## Only implemented for haploid/diploid variants with 2 alleles (ref/alt).  See variant spliting code in this repository to convert multi-allelic variants to bi-allelic variants.
 ##
 ## Dependencies: numpy
 
@@ -111,7 +121,7 @@ def process_pl(plrow):
     # - plrow: array of g * n  with phred-scaled likelihood values for n samples and g genotypes.
     #
     # Returns:
-    # - afs:
+    # - afs: allele frequency per allele
     # - posterior_cor: array of g * n with genotype probabilities.
     plrow = plrow - plrow.min(axis=0)
     plrow = 10.0 ** (plrow / -10.0)
