@@ -53,6 +53,10 @@ optional arguments:
   --sample_removal      Remove samples with >80% missingness in the selected variants of the analyzed gene (default: False).
   --pheno PHENO         Name of the column in the meta file that carries the phenotype information
   --causative_mutation  Indicates that there is a column 'causative_mutation_scan' in the pheno file, with samples that carry a causative mutation and need to be removed from the anaysis (default: False).
+  --transcripts_file TRANSCRIPTS_FILE
+                        File with transcripts that should be considered. Default: ades_v29_v19_whitelist_notsl_all_mapped_transcripts.tsv (see publication)
+  --genes_file GENES_FILE
+                        File with list of genes and their locations. Default: genes_data_b37.tsv (see publication). Adapt when using this cript with a different reference genome (see also --transcripts_file).
 ```
 
 

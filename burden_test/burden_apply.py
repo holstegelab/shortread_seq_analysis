@@ -787,7 +787,7 @@ if __name__ == '__main__':
     parser.add_argument('--pheno',default='status',help='Name of the column in the meta file that carries the phenotype information')
     parser.add_argument('--causative_mutation',action='store_true',default=False, help="Indicates that there is a column 'causative_mutation_scan' in the pheno file, with samples that carry a causative mutation and need to be removed from the anaysis (default: False).")
     parser.add_argument('--transcripts_file',default='ades_v29_v19_whitelist_notsl_all_mapped_transcripts.tsv', help='File with transcripts that should be considered. Default: ades_v29_v19_whitelist_notsl_all_mapped_transcripts.tsv (see publication)')
-    parser.add_argument('--genes_file',default='genes_data_b37.tsv', help='File with list of genes and their locations. Default: genes_data_b37.tsv (see publication). Adapt if using on different reference genome.')
+    parser.add_argument('--genes_file',default='gene_data_b37.tsv', help='File with list of genes and their locations. Default: gene_data_b37.tsv (see publication). Adapt when using this cript with a different reference genome (see also --transcripts_file).')
     
     args = parser.parse_args()
     vcf_filename = os.path.expanduser(args.vcf)
