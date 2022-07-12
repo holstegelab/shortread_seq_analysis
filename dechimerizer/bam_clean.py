@@ -281,7 +281,7 @@ def rg_prune(readgroup):
                 else:
                     for p in range(pos, pos + length):
                         sequse[p] += 1
-                w.extend(range(pos, pos + length))
+                w.extend(list(range(pos, pos + length)))
                 pos += length
             elif ctype == "H" or ctype == "D" or ctype == "N" or ctype == "P":
                 pass
@@ -623,7 +623,7 @@ def get_position_order(readgroup):
     ]
     seq = [readgroup["primary"][9]] + [e[9] for e in readgroup.get("supplementary", [])]
 
-    sortidx = sorted(range(len(read_startpos)), key=read_startpos.__getitem__)
+    sortidx = sorted(list(range(len(read_startpos))), key=read_startpos.__getitem__)
     chrom_sorted = [chrom[e] for e in sortidx]
     pos_sorted = [pos[e] for e in sortidx]
     cigars_sorted = [cigars[e] for e in sortidx]

@@ -18,10 +18,10 @@ def get_csv(filename, fieldnames=None):
     with open(filename) as meta_file:
         meta_reader = csv.reader(meta_file, delimiter="\t")
         if fieldnames is None:
-            fieldnames = meta_reader.next()
+            fieldnames = next(meta_reader)
         meta_data = [row for row in meta_reader]
 
-    return {fieldname: col for fieldname, col in zip(fieldnames, zip(*meta_data))}
+    return {fieldname: col for fieldname, col in zip(fieldnames, list(zip(*meta_data)))}
 
 
 def hardy(obs_hom1, obs_hets, obs_hom2):
@@ -380,7 +380,7 @@ def parse_matrix(outfile, meta_file, filename, range_description=None, nproc=1):
     vcf_iter = iter(vcf_reader(range_description))
     try:
         while True:
-            v = vcf_iter.next()
+            v = next(vcf_iter)
             if len(rows) == 0:
                 if v.CHROM == "X":
                     control_fil = female_control_fil
@@ -402,7 +402,7 @@ def parse_matrix(outfile, meta_file, filename, range_description=None, nproc=1):
                 colnr = 3
 
             if pls.shape[1] < colnr or ad.shape[1] < 2:
-                print(pls.shape)
+                print((pls.shape))
                 xpls = numpy.ones((pls.shape[0], colnr)) * 100
                 xpls[:, : pls.shape[1]] = pls
                 pls = xpls
@@ -451,7 +451,7 @@ def parse_matrix(outfile, meta_file, filename, range_description=None, nproc=1):
 
         try:
             while True:
-                v = vcf_iter.next()
+                v = next(vcf_iter)
                 pls = v.format("PL")
                 ad = v.format("AD")
                 gt = v.gt_types
@@ -465,7 +465,7 @@ def parse_matrix(outfile, meta_file, filename, range_description=None, nproc=1):
                     colnr = 3
 
                 if pls.shape[1] < colnr or ad.shape[1] < 2:
-                    print(pls.shape)
+                    print((pls.shape))
                     xpls = numpy.ones((pls.shape[0], colnr)) * 100
                     xpls[:, : pls.shape[1]] = pls
                     pls = xpls
@@ -503,7 +503,7 @@ def parse_matrix(outfile, meta_file, filename, range_description=None, nproc=1):
 
 
 if __name__ == "__main__":
-    print(sys.argv)
+    print((sys.argv))
     if len(sys.argv) == 5:
         parse_matrix(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
     else:
