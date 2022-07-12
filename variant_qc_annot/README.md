@@ -36,12 +36,13 @@ This set can be easily adapted as needed in the script.
 - total_althet: total alt read depth for alt calls
 
 Usage:
-    vaf_filter_cy.py {output} {METAFILE} {input}
+    var_qc_annot.py {output} {METAFILE} {input}
 
     Or when using a pipe:
 
-    samtools view {input} | PYTHONPATH={PYTHONPATH}  {MYPATH}/vaf_filter_cy.py {output} {METAFILE} -
+    samtools view {input} | PYTHONPATH={PYTHONPATH}  {MYPATH}/var_qc_annot.py {output} {METAFILE} -
 
 Dependencies:
 - cyvcf2
+- numpy
 - rescale_af.py from posterior_prob folder
