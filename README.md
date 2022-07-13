@@ -20,3 +20,7 @@ The QC procedure used can be found in the supplement of this paper.
 - burden_test:  a stand-alone version of the burden test as used in the publication. Variant prioritization based on VEP/Loftee/transcripts, and with genotype sampling based on posterior probabilistic calls.
 
 
+###Latest release
+
+[![DOI](https://zenodo.org/badge/440135941.svg)](https://zenodo.org/badge/latestdoi/440135941)
+
